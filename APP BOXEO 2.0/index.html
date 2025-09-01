@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boxeo Isidro - Panel Admin</title>
+<style>
+body{
+  margin:0;
+  font-family: Arial, sans-serif;
+  background: url('fondo-boxeo.jpg') no-repeat center center fixed;
+  background-size: cover;
+  color:white;
+}
+header{
+  background: rgba(0,0,0,0.85);
+  padding:15px;
+  text-align:center;
+}
+h1{color:#e63946;}
+.container{
+  background: rgba(0,0,0,0.75);
+  margin:20px auto;
+  padding:20px;
+  border-radius:10px;
+  max-width: 1100px;
+}
+input, select, textarea, button{
+  width:100%;
+  margin:5px 0;
+  padding:8px;
+  border-radius:5px;
+  border:none;
+}
+button{
+  background:#e63946;
+  color:white;
+  cursor:pointer;
+  font-weight:bold;
+}
+button:hover{background:#a4161a;}
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+th,td{border:1px solid white;padding:5px;text-align:center;}
+#calendar{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:5px;
+  margin-top:10px;
+}
+.day{
+  padding:5px;
+  border-radius:5px;
+  background: rgba(255,255,255,0.1);
+}
+.hour-slot{
+  background: rgba(255,255,255,0.2);
+  margin:2px 0;
+  padding:3px;
+  border-radius:3px;
+  cursor:pointer;
+  font-size:12px;
+}
+.full-slot{background: rgba(230,57,70,0.8); cursor:not-allowed;}
+.legend{display:flex;justify-content:space-around;margin-top:10px;}
+.legend div{padding:5px 10px;border-radius:5px;}
+.legend .available{background:rgba(255,255,255,0.2);}
+.legend .full{background: rgba(230,57,70,0.8);}
+.nav-calendar{display:flex;justify-content:space-between; margin-top:10px;}
+</style>
+</head>
+<body>
+
+<header>
+<h1>Boxeo Isidro 🥊 - Panel Administrador</h1>
+<p>Tel: 657526786 | Email: clubdeboxeoisidro@gmail.com</p>
+</header>
+
+<div id="login-container" class="container">
+<h2>Acceso Administrador</h2>
+<input type="text" id="login-username" placeholder="Usuario">
+<input type="password" id="login-password" placeholder="Contraseña">
+<button onclick="login()">Entrar</button>
+</div>
+
+<div id="admin-panel" class="container hidden">
+<h2>Gestión de Alumnos y Entrenamientos</h2>
+
+<h3>Registrar Nuevo Alumno</h3>
+<input type="text" id="reg-nombre" placeholder="Nombre">
+<input type="text" id="reg-apellidos" placeholder="Apellidos">
+<input type="text" id="reg-dni" placeholder="DNI">
+<input type="text" id="reg-telefono" placeholder="Teléfono">
+<input type="text" id="reg-username" placeholder="Usuario">
+<input type="password" id="reg-password" placeholder="Contraseña">
+<button onclick="register()">Registrar Alumno</button>
+
+<h3>Alumnos Registrados</h3>
+<table id="student-table">
+<thead>
+<tr>
+<th>Nombre</th><th>Apellidos</th><th>DNI</th><th>Teléfono</th><th>Usuario</th><th>Acciones</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h3>Entrenamiento General</h3>
+<textarea id="general-training-input" placeholder="Entrenamiento general"></textarea>
+<button onclick="saveGeneralTraining()">Guardar</button>
+
+<h3>Entrenamientos Personales</h3>
+<select id="training-user"></select>
+<textarea id="personal-training-input" placeholder="Entrenamiento personal"></textarea>
+<button onclick="savePersonalTraining()">Guardar</button>
+
+<h3>Reservas de todos los alumnos</h3>
+<div id="all-reservations"></div>
+<button onclick="exportCSV()">Exportar a CSV</button>
+
+<h3>Calendario Mensual Interactivo</h3>
+<div class="nav-calendar">
+<button onclick="changeMonth(-1)">◀ Mes anterior</button>
+<button onclick="changeMonth(1)">Mes siguiente ▶</button>
+</div>
+<div id="calendar"></div>
+<div class="legend">
+<div class="available">Disponible</div>
+<div class="full">Completo</div>
+</div>
+
+<button onclick="logout()">Cerrar sesión</button>
+</div>
+
+<script>
+const adminUser="admin";
+const adminPass="210879";
+let users=JSON.parse(localStorage.getItem("users"))||{};
+let generalTraining=JSON.parse(localStorage.getItem("generalTraining"))||[];
+let reservations=JSON.parse(localStorage.getItem("reservations"))||{};
+let currentMonth=new Date().getMonth();
+let currentYear=new Date().getFullYear();
+
+function login(){
+  const u=document.getElementById("login-username").value;
+  const p=document.getElementById("login-password").value;
+  if(u===adminUser && p===adminPass){
+    document.getElementById("login-container").classList.add("hidden");
+    document.getElementById("admin-panel").classList.remove("hidden");
+    loadAdmin();
+  }else alert("Usuario o contraseña incorrectos");
+}
+
+function logout(){
+  document.querySelectorAll(".container").forEach(c=>c.classList.add("hidden"));
+  document.getElementById("login-container").classList.remove("hidden");
+}
+
+function register(){
+  const username=document.getElementById("reg-username").value;
+  if(!username||users[username]){alert("Usuario inválido o ya registrado"); return;}
+  users[username]={
+    nombre: document.getElementById("reg-nombre").value,
+    apellidos: document.getElementById("reg-apellidos").value,
+    dni: document.getElementById("reg-dni").value,
+    telefono: document.getElementById("reg-telefono").value,
+    password: document.getElementById("reg-password").value,
+    personalTraining:[]
+  };
+  localStorage.setItem("users",JSON.stringify(users));
+  alert("Alumno registrado");
+  loadAdmin();
+}
+
+function loadAdmin(){
+  const tbody=document.querySelector("#student-table tbody");
+  tbody.innerHTML="";
+  const select=document.getElementById("training-user");
+  select.innerHTML="";
+  for(let u in users){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${users[u].nombre}</td><td>${users[u].apellidos}</td><td>${users[u].dni}</td>
+    <td>${users[u].telefono}</td><td>${u}</td>
+    <td><button onclick="deleteUser('${u}')">Borrar</button></td>`;
+    tbody.appendChild(tr);
+
+    const option=document.createElement("option");
+    option.value=u; option.textContent=u;
+    select.appendChild(option);
+  }
+
+  const allRes=document.getElementById("all-reservations");
+  allRes.innerHTML="";
+  for(let day in reservations){
+    allRes.innerHTML+=`<p>${day}: ${reservations[day].join(", ")}</p>`;
+  }
+
+  document.getElementById("general-training-input").value=generalTraining.join("\n");
+  loadCalendar();
+}
+
+function deleteUser(u){
+  if(confirm("Eliminar usuario "+u+"?")){
+    delete users[u];
+    localStorage.setItem("users",JSON.stringify(users));
+    loadAdmin();
+  }
+}
+
+function saveGeneralTraining(){
+  generalTraining=document.getElementById("general-training-input").value.split("\n");
+  localStorage.setItem("generalTraining",JSON.stringify(generalTraining));
+  alert("Entrenamiento general guardado");
+}
+
+function savePersonalTraining(){
+  const u=document.getElementById("training-user").value;
+  const val=document.getElementById("personal-training-input").value;
+  if(!users[u].personalTraining) users[u].personalTraining=[];
+  users[u].personalTraining.push(val);
+  localStorage.setItem("users",JSON.stringify(users));
+  alert("Entrenamiento personal guardado");
+}
+
+// Calendario mensual interactivo con horarios
+function loadCalendar(){
+  const calendar=document.getElementById("calendar");
+  calendar.innerHTML="";
+  const firstDay=new Date(currentYear,currentMonth,1).getDay();
+  const daysInMonth=new Date(currentYear,currentMonth+1,0).getDate();
+
+  for(let i=0;i<firstDay;i++){
+    const emptyDiv=document.createElement("div");
+    calendar.appendChild(emptyDiv);
+  }
+
+  for(let d=1;d<=daysInMonth;d++){
+    const dateObj=new Date(currentYear,currentMonth,d);
+    const dayOfWeek=dateObj.getDay();
+    if(dayOfWeek===0) continue; // Domingo no hay clases
+
+    const dayDiv=document.createElement("div");
+    dayDiv.className="day";
+    dayDiv.innerHTML=`<strong>${d}</strong><br>`;
+
+    const slots=[];
+    if(dayOfWeek>=1 && dayOfWeek<=4){
+      slots.push({time:"18:00-19:30", max:15});
+      slots.push({time:"20:00-21:30", max:15});
+    } else if(dayOfWeek===5){
+      slots.push({time:"18:00-20:00", max:5});
+    }
+
+    slots.forEach(s=>{
+      const key=`${currentYear}-${currentMonth+1}-${d}-${s.time}`;
+      if(!reservations[key]) reservations[key]=[];
+      const slotDiv=document.createElement("div");
+      slotDiv.className="hour-slot";
+      slotDiv.innerText=`${s.time} (${reservations[key].length}/${s.max})`;
+      if(reservations[key].length>=s.max) slotDiv.classList.add("full-slot");
+      slotDiv.onclick=()=>{
+        if(reservations[key].length>=s.max) return;
+        const name=prompt("Nombre del alumno para reservar:");
+        if(!name) return;
+        reservations[key].push(name);
+        localStorage.setItem("reservations",JSON.stringify(reservations));
+        loadCalendar();
+        loadAdmin();
+      }
+      dayDiv.appendChild(slotDiv);
+    });
+
+    calendar.appendChild(dayDiv);
+  }
+}
+
+function changeMonth(offset){
+  currentMonth+=offset;
+  if(currentMonth<0){currentMonth=11;currentYear--;}
+  if(currentMonth>11){currentMonth=0;currentYear++;}
+  loadCalendar();
+}
+
+function exportCSV(){
+  let csv="Usuario,Nombre,Apellidos,DNI,Teléfono,Entrenamientos Personales\n";
+  for(let u in users){
+    const usr=users[u];
+    csv+=`${u},${usr.nombre},${usr.apellidos},${usr.dni},${usr.telefono},"${(usr.personalTraining||[]).join(";")}"\n`;
+  }
+  const blob=new Blob([csv],{type:"text/csv"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="alumnos_boxeo.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
